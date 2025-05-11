@@ -24,14 +24,20 @@ jobs:
           submodules: true
 
       - name: "Build lmpnn pymol plugin"
-        run: & ".\distribute\build\windows.ps1"
+        run: |
+          $current_dir = Get-Location
+          ls
+          echo "$current_dir"
+          $script = "$current_dir\distribute\package\windows.ps1"
+          echo "$script"
+          & "$script"
         shell: pwsh
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          name: "Nightly Release ${{ date }}"
-          files: result.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          repo_token: "${{ secrets.RELEASE_TOKEN }}"
+          prerelease: true
+          automatic_release_tag: "v${{ env.date }}-nightly"
+          title: "Nightly Build ${{ env.date }}"
+          files: "lmpnn-gui-pymol-*.zip"
 
