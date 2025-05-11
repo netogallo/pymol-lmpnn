@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "lmpnn-gui"
+name = "lmpnn_gui"
 version = "0.1.0"
 description = ""
 authors = ["Ernesto Rodriguez <connect@netowork.me>"]
@@ -7,6 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
+pyqt5 = "^5.15.11"
 
 
 [build-system]

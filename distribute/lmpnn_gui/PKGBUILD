@@ -1,0 +1,30 @@
+_realname=lmpnn-gui
+pkgbase=mingw-w64-python-${_realname}
+pkgname=("${MINGW_PACKAGE_PREFIX}-python-${_realname}")
+pkgver="${LMPNN_GUI_VERSION}"
+pkgrel="${LMPNN_GUI_RELEASE}"
+pkgdesc="A GUI to use the ligand-mpnn model"
+arch=('any')
+mingw_arch=('mingw64')
+license=('MIT')
+makedepends=("${MINGW_PACKAGE_PREFIX}-python-poetry")
+depends=(
+  "${MINGW_PACKAGE_PREFIX}-python-pyqt5"
+  "${MINGW_PACKAGE_PREFIX}-pyqt5-sip"
+  "${MINGW_PACKAGE_PREFIX}-qt5-declarative")
+source=('lmpnn_gui.src.tar.gz')
+md5sums=('SKIP')
+
+build() {
+  BUILDDIR="python-build-${MSYSTEM}"
+  cp -r "lmpnn_gui" "$BUILDDIR"
+  cd "$BUILDDIR" && ${MINGW_PREFIX}/bin/poetry build -f wheel
+}
+
+package() {
+  cd "${srcdir}/python-build-${MSYSTEM}"
+  MSYS2_ARG_CONV_EXCL="--prefix=" \
+    ${MINGW_PREFIX}/bin/python -m installer --prefix=${MINGW_PREFIX} \
+    --destdir="${pkgdir}" dist/*.whl
+}
+

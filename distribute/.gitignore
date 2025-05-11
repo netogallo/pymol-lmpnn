@@ -1,0 +1,4 @@
+lmpnn_gui/pkg
+lmpnn_gui/src
+lmpnn_gui/*.tar.gz
+lmpnn_gui/*.tar.zst

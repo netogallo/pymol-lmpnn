@@ -1,0 +1,37 @@
+---
+name: "pre-release"
+
+on:
+  push:
+    branches:
+      - "main"
+    tags-ignore:
+      - "*"
+
+jobs:
+  gh_pre_release:
+    runs-on: "windows-latest"
+    steps:
+      - name: Get current date
+        id: date
+        run: $date = (Get-Date).ToString("yyyyMMdd"); echo "date=$($date)" | Out-File -FilePath $env:GITHUB_ENV
+
+      - name: "Checkout source code"
+        uses: "actions/checkout@v3"
+        with:
+          lfs: true
+          fetch-depth: 0
+          submodules: true
+
+      - name: "Build lmpnn pymol plugin"
+        run: & ".\distribute\build\windows.ps1"
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Nightly Release ${{ date }}"
+          files: result.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
