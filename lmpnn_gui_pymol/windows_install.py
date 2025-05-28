@@ -1,6 +1,5 @@
 from os import path
 import os
-import ssl
 import subprocess
 import sys
 import tempfile
@@ -8,22 +7,40 @@ from urllib.error import URLError
 from urllib import request
 
 INSTALL_DIR = path.join(os.environ['LOCALAPPDATA'], 'pymol-lmpnn-gui')
-PACMAN = path.join(INSTALL_DIR, 'usr', 'bin', 'pacman.exe')
+MSYS_DIR = path.join(INSTALL_DIR, "msys64")
+PACMAN = path.join(MSYS_DIR, 'usr', 'bin', 'pacman.exe')
+BASH = path.join(MSYS_DIR, 'usr', 'bin', 'bash.exe')
 PLUGIN_DIR = path.dirname(__file__)
 PKGS_DIR = path.join(PLUGIN_DIR, "pkgs")
-MYSYS2_CA = path.join(PLUGIN_DIR, "mysys2.crt")
+UTILS_DIR = path.join(PLUGIN_DIR, "utils")
+XZ = path.join(PLUGIN_DIR, "utils", "xz.exe")
 
 class PacmanException(Exception):
     pass
 
-def run_process(*args):
+def run_process(*args, cwd = None, env = None):
     subprocess.run(
         args,
         creationflags=subprocess.CREATE_NO_WINDOW,
         check = True,
         stdout = sys.stdout,
-        stderr = sys.stderr
+        stderr = sys.stderr,
+        cwd = cwd,
+        env = env
     )
+
+def bash(*args):
+    cmd = [BASH] + list(args)
+    run_process(*cmd)
+
+def tar_windows(*args, cwd = None):
+    cmd = ["tar"] + list(args)
+    exe_path = os.pathsep.join([UTILS_DIR, os.environ["PATH"]])
+    env = {
+        **os.environ,
+        'PATH': exe_path
+    }
+    run_process(*cmd, cwd = cwd, env = env)
 
 def pacman(*args: str):
 
@@ -33,6 +50,10 @@ def pacman(*args: str):
         run_process(*cmd)
     except Exception as e:
         raise PacmanException(e)
+
+def xz(*args, cwd=None):
+    cmd = [XZ] + list(args)
+    run_process(*cmd, cwd=cwd)
 
 def has_mysys2():
 
@@ -45,54 +66,33 @@ def has_mysys2():
         return False
 
 def download_mysys2(manual_ssl=False):
-    mysys2_installer = tempfile.mktemp(suffix=".exe")
-    mysys2_url = "https://repo.msys2.org/distrib/msys2-x86_64-latest.exe"
+    msys2_installer = tempfile.mktemp(suffix=".tar.xz")
+    msys2_url = "https://repo.msys2.org/distrib/msys2-x86_64-latest.tar.xz"
 
-    if manual_ssl:
-        # Python, is it too much to ask to be able to do https
-        # requests w/o having to install additional packages?
-
-        ssl_ctx = ssl.create_default_context(cafile=MYSYS2_CA)
-        response = request.urlopen(mysys2_url, context=ssl_ctx)
-    else:
-        response = request.urlopen(mysys2_url)
-
-    approx_size = 82*1024*1024
-    count = 0
-    perc = 0
-    print(f"Saving mysys2 installer to {mysys2_installer}")
-    with open(mysys2_installer, 'wb') as fs, response:
-        while True:
-            bs = response.read(8192)
-
-            if len(bs) == 0:
-                return mysys2_installer
-
-            count += len(bs)
-            new_perc = int(100 * min(1,count / approx_size))
-            if new_perc > perc:
-                perc = new_perc
-                print(f"Downloading mysys2 {perc}%")
-            fs.write(bs)
+    run_process("curl", "-o", msys2_installer, msys2_url)
+    return msys2_installer
 
 def install_mysys2(remove_existing = False):
+    import shutil
 
     if remove_existing and path.isdir(INSTALL_DIR):
-        os.removedirs(INSTALL_DIR)
+        shutil.rmtree(INSTALL_DIR)
 
     if has_mysys2():
         return True
 
     try:
-        mysys2_installer = download_mysys2()
+        msys2_installer = download_mysys2()
     except URLError:
-        mysys2_installer = download_mysys2(True)
+        msys2_installer = download_mysys2(True)
 
     print(f"Installing into {INSTALL_DIR}")
+    xz("-dv", msys2_installer)
+    os.mkdir(INSTALL_DIR)
+    msys2_tar = msys2_installer.replace(".xz","")
+    tar_windows("-xvf", msys2_tar, "-C", INSTALL_DIR) 
 
-    run_process(mysys2_installer, "in", "--confirm-command", "--accept-messages", "--root", INSTALL_DIR)
-
-    pacman("-Syu", "--noconfirm")
+    bash("--login", "-c", "pacman -Syu --noconfirm")
 
     return True
 
@@ -103,6 +103,7 @@ def install_pacman_pkgs():
         if file.endswith(".tar.zst")
     ]
 
+    pacman("-Syu", "--noconfirm")
     pacman("-U", "--noconfirm", *pkgs)
 
 
@@ -115,7 +116,10 @@ def main():
     try:
         install_all()
     except Exception as e:
+        import time
         print(f"An error occured while upgrading. Trying a full re-install: {e}")
+        print(f"Waiting 5 seconds so Windows doesn't freak out")
+        time.sleep(5)
         install_all(True)
 
     print("Installation completed!")

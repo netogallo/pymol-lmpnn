@@ -25,6 +25,8 @@ PKGNAME="$MINGW_PACKAGE_PREFIX-python-lmpnn-gui-$LMPNN_GUI_VERSION-$LMPNN_GUI_RE
 mv "$dir/distribute/lmpnn_gui/$PKGNAME" "$dir/lmpnn_gui_pymol/pkgs"
 
 # Download xz and bundle with the plugin
+# because windows cannot decompress xz
+# archives by itself.
 mkdir -p "$dir/lmpnn_gui_pymol/utils"
 XZ_TMP=$(mktemp -d)
 XZ_TOOLS="$XZ_TMP/xz-5.8.1-windows.zip"

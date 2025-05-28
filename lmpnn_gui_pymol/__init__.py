@@ -10,19 +10,15 @@ def ask_retry():
     return False
 
 def is_already_installed():
-    from os import path
-    import os
     import re
     import subprocess
-    from .constants import INSTALL_DIR
+    from .constants import PACMAN
     
-    install_dir = INSTALL_DIR
-    pacman = path.join(install_dir, 'usr', 'bin', 'pacman.exe')
     check_re = r"Version\s+:\s+\d{8}-\d"
 
     try:
         p = subprocess.run(
-            [pacman, '-Qi', 'mingw-w64-x86_64-python-lmpnn-gui'],
+            [PACMAN, '-Qi', 'mingw-w64-x86_64-python-lmpnn-gui'],
             capture_output = True, text = True,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
@@ -30,12 +26,13 @@ def is_already_installed():
         output = str(p.stdout)
 
         if p.returncode == 0 and re.findall(check_re, output):
-            # MySys2 is installed and lmpnn_gui is installed
+            # msys is installed and lmpnn_gui is installed
             return True
         else:
-            # MySys2 is installed but lmpnn_gui is not installed
+            # msys is installed but lmpnn_gui is not installed
             return False
     except Exception:
+        # Not even msys2 is installed
         return False
 
 def check_installation_windows():
