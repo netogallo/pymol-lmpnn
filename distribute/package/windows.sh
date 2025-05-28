@@ -5,7 +5,7 @@ set -e
 # Install makepkg
 dir=$1
 cd "$dir"
-pacman -S --noconfirm --needed base-devel zip wget
+pacman -S --noconfirm --needed base-devel zip wget unzip
 
 export MINGW_PACKAGE_PREFIX="mingw-w64-x86_64"
 export MINGW_PREFIX="/mingw64"
