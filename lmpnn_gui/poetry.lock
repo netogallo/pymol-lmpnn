@@ -317,41 +317,6 @@ MarkupSafe = ">=2.0"
 i18n = ["Babel (>=2.7)"]
 
 [[package]]
-name = "lmpnn"
-version = "0.1.0"
-description = "This is a poetry file for LigandMPNN for easier use in this repository"
-optional = false
-python-versions = "^3.11"
-files = []
-develop = true
-
-[package.dependencies]
-biopython = "^1.79"
-dm-tree = "0.1.8"
-filelock = "^3.13.1"
-fsspec = "^2024.3.1"
-Jinja2 = "^3.1.3"
-MarkupSafe = "^2.1.5"
-ml-collections = "0.1.1"
-mpmath = "^1.3.0"
-networkx = "^3.2.1"
-numpy = "^1.23.5"
-ProDy = "2.4.1"
-pyparsing = "3.1.1"
-scipy = "1.12.0"
-sympy = "1.12"
-torch = "2.2.1"
-triton = "2.2.0"
-typing_extensions = "4.10.0"
-
-[package.extras]
-nvidia = ["nvidia-cublas-cu12 (>=12.1.3.1,<13.0.0.0)", "nvidia-cuda-cupti-cu12 (==12.1.105)", "nvidia-cuda-nvrtc-cu12 (==12.1.105)", "nvidia-cuda-runtime-cu12 (==12.1.105)", "nvidia-cudnn-cu12 (==8.9.2.26)", "nvidia-cufft-cu12 (==11.0.2.54)", "nvidia-curand-cu12 (==10.3.2.106)", "nvidia-cusolver-cu12 (==11.4.5.107)", "nvidia-cusparse-cu12 (==12.1.0.106)", "nvidia-nccl-cu12 (==2.19.3)", "nvidia-nvjitlink-cu12 (==12.4.99)", "nvidia-nvtx-cu12 (==12.1.105)"]
-
-[package.source]
-type = "directory"
-url = "../lmpnn"
-
-[[package]]
 name = "markupsafe"
 version = "2.1.5"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -645,14 +610,14 @@ files = [
 
 [[package]]
 name = "nvidia-nvjitlink-cu12"
-version = "12.9.41"
+version = "12.4.99"
 description = "Nvidia JIT LTO Library"
 optional = false
 python-versions = ">=3"
 files = [
-    {file = "nvidia_nvjitlink_cu12-12.9.41-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:c3a2cd87cecf3f0ca5e5df97115ede3a81efec1d4b7e2ec89d13f66834042930"},
-    {file = "nvidia_nvjitlink_cu12-12.9.41-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:631270891e78de08ebc669bb9ba4418b7899da9efb927fcf6fdff85c9507f54f"},
-    {file = "nvidia_nvjitlink_cu12-12.9.41-py3-none-win_amd64.whl", hash = "sha256:d7980883fddf331adb635be475b9d7f07272273cd51f6da8adf487571f17da9e"},
+    {file = "nvidia_nvjitlink_cu12-12.4.99-py3-none-manylinux2014_aarch64.whl", hash = "sha256:75d6498c96d9adb9435f2bbdbddb479805ddfb97b5c1b32395c694185c20ca57"},
+    {file = "nvidia_nvjitlink_cu12-12.4.99-py3-none-manylinux2014_x86_64.whl", hash = "sha256:c6428836d20fe7e327191c175791d38570e10762edc588fb46749217cd444c74"},
+    {file = "nvidia_nvjitlink_cu12-12.4.99-py3-none-win_amd64.whl", hash = "sha256:991905ffa2144cb603d8ca7962d75c35334ae82bf92820b6ba78157277da1ad2"},
 ]
 
 [[package]]
@@ -1129,7 +1094,10 @@ files = [
     {file = "wcwidth-0.2.13.tar.gz", hash = "sha256:72ea0c06399eb286d978fdedb6923a9eb47e1c486ce63e9b4e64fc18303972b5"},
 ]
 
+[extras]
+nvidia = ["nvidia-cublas-cu12", "nvidia-cuda-cupti-cu12", "nvidia-cuda-nvrtc-cu12", "nvidia-cuda-runtime-cu12", "nvidia-cudnn-cu12", "nvidia-cufft-cu12", "nvidia-curand-cu12", "nvidia-cusolver-cu12", "nvidia-cusparse-cu12", "nvidia-nccl-cu12", "nvidia-nvjitlink-cu12", "nvidia-nvtx-cu12"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "65ccfba1e4f072b1fba46d98d9a74de5b2486d8beb3477c42b7c2e46afbd295a"
+content-hash = "bd4bf918d0bca5f8e9d716a9c8d2bacb0d8d3f9e46e1f50a4f95d863bb5681e7"

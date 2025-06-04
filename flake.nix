@@ -37,12 +37,17 @@
                   python3.pkgs.virtualenv
                   
                   # needed by prody
-                  gcc13
+                  pkgs.libgcc
+                  pkgs.gcc13Stdenv
 
                   # Easy way to make qt work with ipython
                   python3.pkgs.pyqt5
                   python3.pkgs.pyqt5-stubs
                 ];
+                shellHook = ''
+                  SHELL=/run/current-system/sw/bin/bash
+                  GCC_13="${pkgs.gcc13Stdenv}"
+                '';
               };
             };
           }
