@@ -35,6 +35,9 @@
                   python3
                   pkgs.poetry
                   python3.pkgs.virtualenv
+                  
+                  # needed by prody
+                  gcc13
 
                   # Easy way to make qt work with ipython
                   python3.pkgs.pyqt5
