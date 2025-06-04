@@ -1,0 +1,3 @@
+[submodule "lmpnn_gui/lmpnn"]
+	path = lmpnn_gui/lmpnn
+	url = https://github.com/netogallo/LigandMPNN.git
