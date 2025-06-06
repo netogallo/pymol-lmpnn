@@ -1,0 +1,5 @@
+{
+  "include": ["lmpnn_gui", "lmpnn_gui_pymol", "lmpnn"],
+  "venvPath": ".",
+  "venv": ".venv"
+}
