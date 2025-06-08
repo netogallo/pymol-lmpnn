@@ -17,7 +17,10 @@ md5sums=('SKIP')
 
 build() {
   BUILDDIR="python-build-mingw-w64"
-  cp -r "lmpnn_gui" "$BUILDDIR"
+  mkdir -p "$BUILDDIR"
+  cp -r "lmpnn_gui" "$BUILDDIR/"
+  cp -r "lmpnn" "$BUILDDIR/"
+  cp pyproject.toml "$BUILDDIR/"
   cd "$BUILDDIR" && "/mingw64/bin/poetry" build -f wheel
 }
 

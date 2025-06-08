@@ -13,15 +13,24 @@ export MSYSTEM="mingw-w64"
 export LMPNN_GUI_VERSION="$(date +%Y%m%d)"
 export LMPNN_GUI_RELEASE="1"
 
-# Build the lmpnn_gui package
-tar -czvf "$dir/distribute/lmpnn_gui/lmpnn_gui.src.tar.gz" "lmpnn_gui"
+# Download the lmpnn models
+MODELS_DIR="$dir/lmpnn/models"
+mkdir -p "$MODELS_DIR"
+wget -q https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_005_25.pt -O "$MODELS_DIR/ligandmpnn_v_32_005_25.pt"
 
+# Build the lmpnn_gui package
 cd "$dir/distribute/lmpnn_gui"
+rm -rf src pkg
+tar -czvf \
+    "$dir/distribute/lmpnn_gui/lmpnn_gui.src.tar.gz" \
+    "lmpnn_gui" "pyproject.toml" "lmpnn" "README.md"
 makepkg -sf --noconfirm
 cd "$dir"
 
 # Create the pymol plugin
 PKGNAME="$MINGW_PACKAGE_PREFIX-python-lmpnn-gui-$LMPNN_GUI_VERSION-$LMPNN_GUI_RELEASE-any.pkg.tar.zst"
+
+rm "$dir/lmpnn_gui_pymol/pkgs/*"
 mv "$dir/distribute/lmpnn_gui/$PKGNAME" "$dir/lmpnn_gui_pymol/pkgs"
 
 # Download xz and bundle with the plugin
