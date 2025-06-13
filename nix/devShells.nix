@@ -1,9 +1,28 @@
-{ pkgs, qt5, python3, mkShell, poetry, gcc13, stdenv, makeWrapper }:
+{ pkgs
+, qt5
+, glib
+, python3
+, mkShell
+, poetry
+, gcc13
+, stdenv
+, libglvnd
+, libkrb5
+, makeWrapper
+}:
 let
+  inherit (pkgs.lib) makeLibraryPath;
   pymol = pkgs.pymol.override {
     inherit qt5;
     python3Packages = python3.pkgs;
   };
+  pythonLibs = makeLibraryPath [
+    gcc13.cc
+    gcc13.libc
+    glib
+    libglvnd
+    libkrb5
+  ];
   poetry-wrapped = stdenv.mkDerivation {
     pname = "wrapped-poetry";
     version = "1.0.0";
@@ -24,7 +43,7 @@ let
       # Wrap poetry
       makeWrapper ${pkgs.poetry}/bin/poetry $out/bin/poetry \
         --set POETRY_HOME /my/custom/poetry/home \
-        --prefix LD_LIBRARY_PATH : ${gcc13.cc.lib}/lib
+        --prefix LD_LIBRARY_PATH : ${pythonLibs}
     '';
   };
 in
