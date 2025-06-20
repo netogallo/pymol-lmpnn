@@ -9,9 +9,9 @@ mingw_arch=('mingw64')
 license=('GPLv3')
 makedepends=("${MINGW_PACKAGE_PREFIX}-python-poetry")
 depends=(
-  "${MINGW_PACKAGE_PREFIX}-python-pyqt5"
-  "${MINGW_PACKAGE_PREFIX}-pyqt5-sip"
-  "${MINGW_PACKAGE_PREFIX}-qt5-declarative")
+  "${MINGW_PACKAGE_PREFIX}-python-pyqt6"
+  "${MINGW_PACKAGE_PREFIX}-pyqt6-sip"
+  "${MINGW_PACKAGE_PREFIX}-qt6-declarative")
 source=('lmpnn_gui.src.tar.gz')
 md5sums=('SKIP')
 

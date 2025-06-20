@@ -9,6 +9,13 @@
 , libglvnd
 , libkrb5
 , makeWrapper
+, zstd
+, zlib
+, fontconfig
+, libX11
+, libxkbcommon
+, freetype
+, dbus
 }:
 let
   inherit (pkgs.lib) makeLibraryPath;
@@ -22,6 +29,14 @@ let
     glib
     libglvnd
     libkrb5
+    zstd
+    zlib
+    fontconfig
+    libX11
+    libxkbcommon
+    freetype
+    dbus
+    python3.pkgs.pyqt6
   ];
   poetry-wrapped = stdenv.mkDerivation {
     pname = "wrapped-poetry";
@@ -43,9 +58,10 @@ let
       # Wrap poetry
       makeWrapper ${pkgs.poetry}/bin/poetry $out/bin/poetry \
         --set POETRY_HOME /my/custom/poetry/home \
-        --prefix LD_LIBRARY_PATH : ${pythonLibs}
+        --prefix LD_LIBRARY_PATH : ${pythonLibs} \
     '';
   };
+  py = python3.withPackages (p: with p; [ virtualenv pyqt6 ]);
 in
 {
   default = mkShell {
@@ -54,12 +70,7 @@ in
     packages = [
       pymol
       poetry-wrapped
-      python3
-      python3.pkgs.virtualenv
-
-      # Easy way to make qt work with ipython
-      python3.pkgs.pyqt5
-      python3.pkgs.pyqt5-stubs
+      py
     ];
     shellHook = ''
       # export SHELL=/run/current-system/sw/bin/bash

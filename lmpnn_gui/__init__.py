@@ -1,7 +1,7 @@
 from os import path
-from PyQt5.QtCore import QUrl
-from PyQt5.QtGui import QGuiApplication
-from PyQt5.QtQuick import QQuickView
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtQuick import QQuickView
 
 from typing import List
 

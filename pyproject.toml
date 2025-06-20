@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-pyqt5 = "^5.15.11"
+PyQt6 = "^6.9.0"
 biopython = "^1.79"
 filelock = "^3.13.1"
 fsspec = "^2024.3.1"
@@ -45,6 +45,9 @@ nvidia-nccl-cu12 = { version = "^2.19.3", optional = true }
 nvidia-nvjitlink-cu12 = { version = "^12.4.99", optional = true }
 nvidia-nvtx-cu12 = { version = "^12.1.105", optional = true }
 
+# Dev dependencies
+debugpy = { version = "^1.8.4", optional = true }
+
 [tool.poetry.extras]
 nvidia = [
   "nvidia-cublas-cu12",
@@ -59,6 +62,10 @@ nvidia = [
 	"nvidia-nccl-cu12",
 	"nvidia-nvjitlink-cu12",
 	"nvidia-nvtx-cu12"
+]
+
+dev = [
+  "debugpy"
 ]
 
 [build-system]
