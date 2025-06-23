@@ -1,5 +1,5 @@
-from PyQt5.QtCore import pyqtProperty, pyqtSignal, QObject
-from PyQt5.QtQuick import QQuickView
+from PyQt6.QtCore import pyqtProperty, pyqtSignal, QObject
+from PyQt6.QtQuick import QQuickView
 
 class Application(QObject):
 

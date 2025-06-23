@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-PyQt6 = "^6.9.0"
+PyQt6 = "^6.7.0"
 biopython = "^1.79"
 filelock = "^3.13.1"
 fsspec = "^2024.3.1"
