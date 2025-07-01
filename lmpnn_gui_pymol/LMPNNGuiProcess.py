@@ -53,7 +53,6 @@ class LMPNNGuiProcess(QProcess):
 
     def __transition_to_ready(self, port: int) -> None:
 
-        # Drop the string as port has been found
         self.__init_text = ""
         self.__state = LMPNNGuiProcessState.READY
 

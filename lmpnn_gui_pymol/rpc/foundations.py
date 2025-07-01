@@ -1,9 +1,9 @@
 import re
-from typing import Optional
+from typing import Awaitable, Optional
 
 class Transport():
 
-    def _read_line(self) -> str:
+    def _read_line(self) -> Awaitable[str]:
         """
         The rpc protocol organizes messages in a line by line fashion.
         Each line must contain a json object and each json object
