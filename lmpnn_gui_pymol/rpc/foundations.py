@@ -1,6 +1,9 @@
 import re
 from typing import Awaitable, Optional
 
+class TransportClosedException(Exception):
+    pass
+
 class Transport():
 
     def _read_line(self) -> Awaitable[str]:
@@ -9,8 +12,8 @@ class Transport():
         Each line must contain a json object and each json object
         is a single message.
 
-        The transport will read messages line-by-line and handle
-        them accordingly
+        If the transport has been closed and will no longer produce
+        new messages. This function should raise a 'TransportClosedException'
         """
         raise NotImplementedError
 
