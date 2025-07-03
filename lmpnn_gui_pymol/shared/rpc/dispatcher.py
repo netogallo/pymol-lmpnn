@@ -1,8 +1,10 @@
 from asyncio import Task
 import asyncio
+import json
 from typing import Dict, NamedTuple, Set
 
 from .foundations import Transport, TransportClosedException
+from ..log import Logger
 
 class MessageContext(NamedTuple):
     """
@@ -90,5 +92,18 @@ class TransportManager:
 
 class Dispatcher:
 
+    def __init__(
+        self,
+        logger: Logger,
+        transport: Transport
+    ):
+        self.__transport = transport
+        self.__logger = logger.new_scope(f"Dispatcher[{transport.id()}]")
+
     async def main_loop_async(self):
-        pass
+        async for raw_message in self.__transport:
+
+            self.__logger.log_count("handling message")
+            self.__logger.log_debug(f"payload: {raw_message}")
+
+            msg = json.loads(raw_message)
