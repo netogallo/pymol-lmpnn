@@ -1,7 +1,9 @@
 from abc import ABCMeta, abstractmethod
+from enum import Enum
 import json
 import re
-from typing import Any, Awaitable, cast, NamedTuple, Optional, Type, TypeVar, TypeVarTuple, Union
+from typing import Any, Awaitable, cast, NamedTuple, Optional, Type, TypeVar, Union
+import typing
 
 class TransportClosedException(Exception):
     pass
@@ -50,6 +52,40 @@ def find_port(text: str) -> Optional[int]:
  
 ParseType = TypeVar("ParseType", bound=NamedTuple)
 
+def is_named_tuple(ty: Any) -> bool:
+    return issubclass(ty, tuple) \
+        and hasattr(ty, '_fields') \
+        and all(isinstance(f, str) for f in getattr(ty, '_fields'))
+
+def all_matching_types(ty: Type) -> tuple[Type,...]:
+    origin = typing.get_origin(ty)
+
+    if origin == Union:
+        all_types = typing.get_args(ty)
+    else:
+        all_types = (ty,)
+
+    # Sanity checks. Not all python types are allowed
+    # as they cannot be unambigously distinguished
+    nt_count = 0
+    enum_and_int_count = 0
+
+    for ty in all_types:
+
+        if is_named_tuple(ty):
+            nt_count += 1
+
+        if ty == int or issubclass(ty, Enum):
+            enum_and_int_count += 1
+
+        if nt_count > 1:
+            raise TypeError(f"The union {ty} has more than one NamedTuple. This is ambigous")
+
+        if enum_and_int_count > 1:
+            raise TypeError(f"The union {ty} has more than one Enum or int. This is ambigous")
+
+    return all_types
+
 def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
 
     if isinstance(raw, str):
@@ -59,7 +95,7 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
         # w/o altering the input
         msg = dict(**raw)
 
-    for name,field_ty in ty.__annotations__.items():
+    for name,field_ty_all in ty.__annotations__.items():
         # Check that the values in the json dict correspond
         # to the expected values in the tuple's fields. This
 
@@ -68,14 +104,45 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
 
         value = msg[name]
 
-        # Check if type derives from NamedTuple,
-        # recursively construct the object if so
-        if NamedTuple in field_ty.__orig_bases__:
-            msg[name] = parse(field_ty, value)
-        elif not isinstance(value, field_ty):
-            value_type = value.__class__
-            raise TypeError(f"The field {name} must have type {field_ty}. Found {value_type}.")
+        for field_ty in all_matching_types(field_ty_all):
+
+            # Check if type derives from NamedTuple,
+            # recursively construct the object if so
+            if is_named_tuple(field_ty) and isinstance(value, dict):
+                msg[name] = parse(field_ty, value)
+
+            # Check if type is an Enum. In the affirmative
+            # case, we attempt re-constructing the enum
+            # from the value
+            elif issubclass(field_ty, Enum) and isinstance(value, int):
+                msg[name] = field_ty(value)
+
+            # None of the conversion rules applies to this
+            # member, just check that the types match
+            elif not isinstance(value, field_ty):
+                value_type = value.__class__
+                raise TypeError(f"The field {name} must have type {field_ty}. Found {value_type}.")
 
     msg_any = cast(Any, msg)
     ty_any = cast(Any, ty)
     return ty_any(**msg_any)
+
+def serialize(ty: Type[ParseType], value: ParseType) -> dict:
+    raise NotImplemented
+
+class Envelope(NamedTuple):
+    """
+    All messages are wrapped inside an envelope. The envelop contains additional
+    metadata which allows identifying and grouping messages sent at different
+    times.
+
+    Attributes:
+        message_id (int): An identifier that uniquely identifies this message.
+        transaction_id (int): The transaction identifier, multiple messages can
+            share the same transaction identifier and they will be handled
+            within the same context.
+        value (dict): The payload. This is the actual content of the message.
+    """
+    message_id: int
+    transaction_id: int
+    value: Optional[dict]

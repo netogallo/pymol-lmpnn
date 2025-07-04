@@ -1,9 +1,8 @@
 from asyncio import Task
 import asyncio
-import json
-from typing import Dict, NamedTuple, Set
+from typing import NamedTuple, Set
 
-from .foundations import Transport, TransportClosedException
+from .foundations import Envelope, parse, Transport, TransportClosedException
 from ..log import Logger
 
 class MessageContext(NamedTuple):
@@ -106,4 +105,5 @@ class Dispatcher:
             self.__logger.log_count("handling message")
             self.__logger.log_debug(f"payload: {raw_message}")
 
-            msg = json.loads(raw_message)
+            envelope = parse(Envelope, raw_message)
+
