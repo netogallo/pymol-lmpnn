@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from enum import Enum
 import json
 import re
-from typing import Any, Awaitable, cast, NamedTuple, Optional, Type, TypeVar, Union
+from typing import Any, AsyncIterator, Awaitable, cast, NamedTuple, Optional, Type, TypeVar, Union
 import typing
 
 class TransportClosedException(Exception):
@@ -130,6 +130,10 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
 def serialize(ty: Type[ParseType], value: ParseType) -> dict:
     raise NotImplemented
 
+class TransactionControl(Enum):
+    MESSAGE = 1
+    END = 2
+
 class Envelope(NamedTuple):
     """
     All messages are wrapped inside an envelope. The envelop contains additional
@@ -141,8 +145,62 @@ class Envelope(NamedTuple):
         transaction_id (int): The transaction identifier, multiple messages can
             share the same transaction identifier and they will be handled
             within the same context.
+        transaction_control (TransactionControl): This field contains control 
+            codes that will be used by the message dispatcher to alter the
+            state of the communication channel. Note that if the control
+            is anything other than MESSAGE, it will be assumed that value
+            is None.
         value (dict): The payload. This is the actual content of the message.
     """
     message_id: int
     transaction_id: int
+    transaction_control: TransactionControl
     value: Optional[dict]
+
+class MessageDispatcher(metaclass=ABCMeta):
+    """
+    A message dispatcher is an abstraction that
+    provides the logic to have a bi-lateral
+    messaage exchange channel between two
+    parties.
+    """
+
+    @abstractmethod
+    def on_message(self, payload: dict) -> None:
+        """
+        Whenever a message belonging to the transaction
+        asociated with this MessageDispatcher is received,
+        this method will be called with the message's
+        payload as argument.
+        """
+        raise NotImplemented
+
+    def __aiter__(self) -> AsyncIterator[dict]:
+        """
+        This asynchronous iterator is responsible to produce
+        the messages that will be sent back to the party
+        at the opposite end of the channel. Whenever the
+        iterator yields a value, this will be sent back
+        to the sender. If the iterator completes, it will
+        be assumed that the communication has concluded
+        and the bi-lateral channel will be destroyed.
+        """
+        raise NotImplemented
+
+class TransactionDispatcher(metaclass=ABCMeta):
+    """
+    This class is responsible for creating a
+    MessageDispatcher whenever a new transaction
+    is initiated. A transaction represents a
+    bilateral channel to exchange messages between
+    two parties.
+    """
+
+    def begin_transaction(self, transaction_id: int) -> MessageDispatcher:
+        """
+        If a message with a new transaction_id is received, this method
+        will be called to initiate a new bi-lateral message exchange
+        between two parties. Ultimately, this is just an abstraction to
+        group messages.
+        """
+        raise NotImplemented
