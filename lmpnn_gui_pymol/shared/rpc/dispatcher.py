@@ -1,8 +1,8 @@
 from asyncio import CancelledError, Task
 import asyncio
-from typing import Dict, NamedTuple, Set
+from typing import Awaitable, Dict, NamedTuple, Set
 
-from .foundations import Envelope, MessageDispatcher, parse, Transport, TransactionControl, TransactionDispatcher, TransportClosedException
+from .foundations import AsyncCounter, Envelope, MessageDispatcher, parse, Transport, TransactionControl, TransactionDispatcher, TransportClosedException
 from ..log import Logger
 
 class MessageContext(NamedTuple):
@@ -105,13 +105,37 @@ class Dispatcher:
         self.__logger = logger.new_scope(f"Dispatcher[{transport.id()}]")
         self.__transaction_dispatcher = dispatcher
         self.__message_dispatchers: Dict[int, MessageDispatcherEntry] = {}
+        self.__message_id_counter = AsyncCounter()
 
-    async def __handle_responses(self, transaction_id: int, dispatcher: MessageDispatcher):
+    def __new_message_id(self) -> Awaitable[int]:
+        return self.__message_id_counter.next()
+
+
+    async def __handle_responses(
+        self,
+        transaction_id: int,
+        dispatcher: MessageDispatcher
+    ):
 
         try:
             async for msg in dispatcher:
                 self.__logger.log_count(f"replying message[{transaction_id}]")
-                # todo: transport needs to be made aware of the reply
+
+                envelope = Envelope(
+                    message_id = await self.__new_message_id(),
+                    transaction_id = transaction_id,
+                    transaction_control = TransactionControl.MESSAGE,
+                    value = msg
+                )
+                self.__transport._write_line(serialize(Envelope, envelope))
+
+            # Iterator has completed, notify the other party
+            end = Envelope(
+                message_id = await self.__new_message_id(),
+                transaction_id = transaction_id,
+                transaction_control = TransactionControl.END
+            )
+            self.__transport._write_line(serialize(end))
         except CancelledError:
             # The remote party has cancelled the transaction
             self.__logger.log(f"Terminating the message response loop for {transaction_id}")

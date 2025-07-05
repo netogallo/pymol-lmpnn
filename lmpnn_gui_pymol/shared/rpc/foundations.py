@@ -1,8 +1,9 @@
 from abc import ABCMeta, abstractmethod
+import asyncio
 from enum import Enum
 import json
 import re
-from typing import Any, AsyncIterator, Awaitable, cast, NamedTuple, Optional, Type, TypeVar, Union
+from typing import Any, AsyncIterator, Awaitable, cast, Generic, NamedTuple, Optional, Type, TypeVar, Union
 import typing
 
 class TransportClosedException(Exception):
@@ -26,6 +27,15 @@ class Transport(metaclass=ABCMeta):
 
         If the transport has been closed and will no longer produce
         new messages. This function should raise a 'TransportClosedException'
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def _write_line(self) -> Awaitable[None]:
+        """
+        The rpc protocol sends messages on a line by line fashion. Each
+        line is a json encoded object. However, the transport only needs
+        to provide a mechanism to write the line to the other party.
         """
         raise NotImplementedError
 
@@ -155,7 +165,7 @@ class Envelope(NamedTuple):
     message_id: int
     transaction_id: int
     transaction_control: TransactionControl
-    value: Optional[dict]
+    value: Optional[dict] = None
 
 class MessageDispatcher(metaclass=ABCMeta):
     """
@@ -204,3 +214,27 @@ class TransactionDispatcher(metaclass=ABCMeta):
         group messages.
         """
         raise NotImplemented
+
+TResource = TypeVar('TResource')
+
+class AsyncResource(Generic[TResource], metaclass=ABCMeta):
+    def __init__(self, state: TResource):
+        self.__state = state
+        self.__lock = asyncio.Lock()
+
+    @abstractmethod
+    def __update__(self, state: TResource) -> Awaitable[TResource]:
+        raise NotImplementedError
+
+    async def next(self) -> TResource:
+        async with self.__lock:
+            self.__state = await self.__update__(self.__state)
+            return self.__state
+
+class AsyncCounter(AsyncResource[int]):
+
+    def __init__(self, count: int = 0):
+        super().__init__(count)
+
+    async def __update__(self, value: int) -> int:
+        return value + 1
