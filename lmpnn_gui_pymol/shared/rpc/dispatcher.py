@@ -102,7 +102,10 @@ class Dispatcher:
         dispatcher: TransactionDispatcher
     ):
         self.__transport = transport
-        self.__logger = logger.new_scope(f"Dispatcher[{transport.id()}]")
+        self.__logger = logger.new_scope(
+            class_name = "Dispatcher",
+            transport = transport.id()
+        )
         self.__transaction_dispatcher = dispatcher
         self.__message_dispatchers: Dict[int, MessageDispatcherEntry] = {}
         self.__message_id_counter = AsyncCounter()
@@ -117,9 +120,10 @@ class Dispatcher:
         dispatcher: MessageDispatcher
     ):
 
+        logger = self.__logger.new_scope(transaction_id = str(transaction_id))
         try:
             async for msg in dispatcher:
-                self.__logger.log_count(f"replying message[{transaction_id}]")
+                logger.log_count(f"replying message")
 
                 envelope = Envelope(
                     message_id = await self.__new_message_id(),
@@ -138,7 +142,19 @@ class Dispatcher:
             self.__transport._write_line(serialize(end))
         except CancelledError:
             # The remote party has cancelled the transaction
-            self.__logger.log(f"Terminating the message response loop for {transaction_id}")
+            logger.log("Cancellation triggered by remote party.")
+        except Exception as e:
+            # An unexpected error has occured while reading messages from
+            # the dispatcher. This means that no more mesages will be sent
+            # to the remote party. Therefore we must end the communication
+            logger.log_error(e)
+            end = Envelope(
+                message_id = await self.__new_message_id(),
+                transaction_id = transaction_id,
+                transaction_control = TransactionControl.ERROR,
+                error = str(e)
+            )
+            self.__transport._write_line(serialize(end))
 
     def __dispatch(self, msg: Envelope):
         loop = asyncio.get_event_loop()
@@ -160,9 +176,13 @@ class Dispatcher:
         if control_code == TransactionControl.MESSAGE and value is not None:
             dispatcher.on_message(value)
         if control_code == TransactionControl.MESSAGE and value is None:
-            self.__logger.log_error(f"The message {msg.message_id} of transaction {transaction_id} has control code 'MESSAGE' but empty payload.")
+            self.__logger.log_warning(
+                "Received message of type 'MESSAGE' without payload.",
+                transaction_id = str(transaction_id),
+                message_id = str(msg.message_id)
+            )
         if control_code == TransactionControl.END:
-            self.__logger.log(f"The transaction {transaction_id} has been terminated by the remote party, cancelling responses")
+            self.__logger.log("Transaction terminated by remote party. Cancelling response loop.", transaction_id = str(transaction_id))
             dispatcher_entry.responses_task.cancel()
             self.__message_dispatchers.pop(transaction_id)
 
@@ -170,7 +190,7 @@ class Dispatcher:
         async for raw_message in self.__transport:
 
             self.__logger.log_count("handling message")
-            self.__logger.log_debug(f"payload: {raw_message}")
+            self.__logger.log_debug(f"message payload", payload = raw_message)
 
             envelope = parse(Envelope, raw_message)
             self.__dispatch(envelope)

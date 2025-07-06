@@ -143,6 +143,7 @@ def serialize(ty: Type[ParseType], value: ParseType) -> dict:
 class TransactionControl(Enum):
     MESSAGE = 1
     END = 2
+    ERROR = 3
 
 class Envelope(NamedTuple):
     """
@@ -166,6 +167,7 @@ class Envelope(NamedTuple):
     transaction_id: int
     transaction_control: TransactionControl
     value: Optional[dict] = None
+    error: Optional[str] = None
 
 class MessageDispatcher(metaclass=ABCMeta):
     """
