@@ -39,7 +39,7 @@ class Transport(metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    async def __aiter__(self):
+    async def __aiter__(self) -> AsyncIterator[str]:
         try:
             while(True):
                 yield await self._read_line()
@@ -169,6 +169,22 @@ class Envelope(NamedTuple):
     value: Optional[dict] = None
     error: Optional[str] = None
 
+class MessageDispatcherException(Exception):
+
+    def __init__(self, exception: Exception, will_terminate = True):
+        super().__init__(exception)
+        self.__will_terminate = will_terminate
+
+    @property
+    def will_terminate(self) -> bool:
+        return self.__will_terminate
+
+class MessageDispatcherRemotePartyException(MessageDispatcherException):
+    pass
+
+class MessageDispatcherResponseSerializationException(MessageDispatcherException):
+    pass
+
 class MessageDispatcher(metaclass=ABCMeta):
     """
     A message dispatcher is an abstraction that
@@ -184,6 +200,30 @@ class MessageDispatcher(metaclass=ABCMeta):
         asociated with this MessageDispatcher is received,
         this method will be called with the message's
         payload as argument.
+
+        It is assumed that this function never throws. If
+        a error is to be reported, the iterator should raise
+        an execption.
+        """
+        raise NotImplemented
+
+    @abstractmethod
+    def on_error(self, exn: MessageDispatcherException) -> Awaitable[None]:
+        """
+        This method is used to communicate error conditions to the
+        dispatcher. Error conditions include:
+
+        1) The dispatcher's iterator produced a message that cannot
+            be serialized.
+
+        2) The remote party reported an error while handling a message
+            produced by this dispatcher.
+
+        :param exn: A wrapper value containing the exception and some
+            additional contextual information. The class exposes the
+            property, 'will_terminate', which advises wether the
+            communication will be closed or not after this method
+            returns.
         """
         raise NotImplemented
 

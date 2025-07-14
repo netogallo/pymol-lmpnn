@@ -80,11 +80,11 @@ class Logger(metaclass=ABCMeta):
             **attributes
         )
 
-    def log_error(self, message: Union[Exception,str]):
+    def log_error(self, message: Union[Exception,str], **attributes: str):
 
         if isinstance(message, Exception):
             message = str(message)
-        self.log(message, log_type=LogSeverity.Error)
+        self.log(message, log_type=LogSeverity.Error, **attributes)
 
     def log_count(self, tag: str, log_type=LogSeverity.Info, **kwargs: str):
 
