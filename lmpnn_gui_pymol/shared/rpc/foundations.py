@@ -3,8 +3,10 @@ import asyncio
 from enum import Enum
 import json
 import re
-from typing import Any, AsyncIterator, Awaitable, cast, Generic, NamedTuple, Optional, Type, TypeVar, Union
+from typing import Any, AsyncIterator, Awaitable, cast, Generic, NamedTuple, Optional, Tuple, Type, TypeVar, Union
 import typing
+
+from ..type import TypeChecks
 
 class TransportClosedException(Exception):
     pass
@@ -31,7 +33,7 @@ class Transport(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def _write_line(self) -> Awaitable[None]:
+    def _write_line(self, line: str) -> Awaitable[None]:
         """
         The rpc protocol sends messages on a line by line fashion. Each
         line is a json encoded object. However, the transport only needs
@@ -62,11 +64,6 @@ def find_port(text: str) -> Optional[int]:
  
 ParseType = TypeVar("ParseType", bound=NamedTuple)
 
-def is_named_tuple(ty: Any) -> bool:
-    return issubclass(ty, tuple) \
-        and hasattr(ty, '_fields') \
-        and all(isinstance(f, str) for f in getattr(ty, '_fields'))
-
 def all_matching_types(ty: Type) -> tuple[Type,...]:
     origin = typing.get_origin(ty)
 
@@ -82,10 +79,13 @@ def all_matching_types(ty: Type) -> tuple[Type,...]:
 
     for ty in all_types:
 
-        if is_named_tuple(ty):
+        if TypeChecks.is_named_tuple(ty):
             nt_count += 1
 
-        if ty == int or issubclass(ty, Enum):
+        if TypeChecks.is_list(ty) and len(all_types) > 1:
+            raise TypeError(f"List cannot appear in a union. Found {ty}.")
+
+        if ty == int or ty == str or issubclass(ty, Enum):
             enum_and_int_count += 1
 
         if nt_count > 1:
@@ -105,6 +105,33 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
         # w/o altering the input
         msg = dict(**raw)
 
+    def parse_internal(value: Any, field_ty_all: Type) -> Any:
+        success = False
+        for field_ty in all_matching_types(field_ty_all):
+
+            if TypeChecks.is_any(field_ty):
+                raise TypeError(f"The type 'Any' is not supported for parsing/serialization. Found in {field_ty_all}.")
+
+            # Check if type derives from NamedTuple,
+            # recursively construct the object if so
+            elif TypeChecks.is_named_tuple(field_ty) and isinstance(value, dict):
+                return parse(field_ty, value)
+
+            # Check if type is an Enum. In the affirmative
+            # case, we attempt re-constructing the enum
+            # from the value
+            elif issubclass(field_ty, Enum) and isinstance(value, int):
+                return field_ty(value)
+
+            # None of the conversion rules applies to this
+            # member, just check that the types match
+            elif not isinstance(value, field_ty):
+                value_type = value.__class__
+                raise TypeError(f"The field {name} must have type {field_ty}. Found {value_type}.")
+
+        if not success:
+            raise TypeError(f"The field {name} of type {field_ty_all} cannot be parsed.")
+
     for name,field_ty_all in ty.__annotations__.items():
         # Check that the values in the json dict correspond
         # to the expected values in the tuple's fields. This
@@ -113,32 +140,33 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
             continue
 
         value = msg[name]
+        list_ty = TypeChecks.get_generic_list_type(field_ty_all)
 
-        for field_ty in all_matching_types(field_ty_all):
-
-            # Check if type derives from NamedTuple,
-            # recursively construct the object if so
-            if is_named_tuple(field_ty) and isinstance(value, dict):
-                msg[name] = parse(field_ty, value)
-
-            # Check if type is an Enum. In the affirmative
-            # case, we attempt re-constructing the enum
-            # from the value
-            elif issubclass(field_ty, Enum) and isinstance(value, int):
-                msg[name] = field_ty(value)
-
-            # None of the conversion rules applies to this
-            # member, just check that the types match
-            elif not isinstance(value, field_ty):
-                value_type = value.__class__
-                raise TypeError(f"The field {name} must have type {field_ty}. Found {value_type}.")
+        if list_ty is not None and isinstance(list, value):
+            msg[name] = [parse_internal(v, list_ty) for v in value]
+        elif list_ty is not None:
+            raise TypeError(f"Expecting {value} to be a list")
+        else:
+            msg[name] = parse_internal(value, field_ty_all)
 
     msg_any = cast(Any, msg)
     ty_any = cast(Any, ty)
     return ty_any(**msg_any)
 
-def serialize(ty: Type[ParseType], value: ParseType) -> dict:
-    raise NotImplemented
+def serialize(ty: Type[ParseType], value_to_serialize: ParseType) -> dict:
+
+    result = {}
+    for name, field_ty_all in ty.__annotations__.items():
+
+        value = getattr(value_to_serialize, name)
+
+        for field_ty in all_matching_types(field_ty_all):
+
+            # If the field is a Namedtuple, we serialize recursively
+            if is_named_tuple(field_ty) and isinstance(value, field_ty):
+                result[name] = serialize(field_ty, value)
+                break
+
 
 class TransactionControl(Enum):
     MESSAGE = 1

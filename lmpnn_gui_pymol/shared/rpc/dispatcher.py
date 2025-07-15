@@ -128,7 +128,7 @@ class Dispatcher:
 
         try:
             # Try serializing and writing message to transport
-            await self.__transport._write_line(serialize(Envelope, msg))
+            await self.__transport._write_line(json.dumps(serialize(Envelope, msg)))
         except Exception as e:
 
             # Something went wrong while serializing and writing
@@ -172,6 +172,7 @@ class Dispatcher:
                 if not (await self.__transport_write_line(dispatcher, envelope, logger = logger)):
                     # An error occured while serializing to transport. Under these circumstances
                     # the iteration is to be stopped
+                    logger.log("Error occured. Terminating message response loop.")
                     return
 
             # Iterator has completed, notify the other party
