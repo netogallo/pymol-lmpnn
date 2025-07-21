@@ -3,7 +3,7 @@ import asyncio
 from enum import Enum
 import json
 import re
-from typing import Any, AsyncIterator, Awaitable, cast, Generic, NamedTuple, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, AsyncIterator, Awaitable, cast, Callable, Generic, Iterable, NamedTuple, Optional, Type, TypeVar, Union
 import typing
 
 from ..type import TypeChecks
@@ -33,7 +33,7 @@ class Transport(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def _write_line(self, line: str) -> Awaitable[None]:
+    def _write_lines(self, lines: Iterable[str]) -> Awaitable[None]:
         """
         The rpc protocol sends messages on a line by line fashion. Each
         line is a json encoded object. However, the transport only needs
@@ -50,7 +50,7 @@ class Transport(metaclass=ABCMeta):
             pass
 
 PORT_MAGIC_STRING = "lmpnn_gui listening on port"
-PORT_MATCH_RE = re.compile(f"{PORT_MAGIC_STRING}\\s*:\\s*(?<PORT>(\\d+))")
+PORT_MATCH_RE = re.compile(f"{PORT_MAGIC_STRING}\\s*:\\s*(?P<PORT>(\\d+))")
 
 def mk_port_magic_string(port: int):
     return f"{PORT_MAGIC_STRING}: {port}\n"
@@ -63,6 +63,8 @@ def find_port(text: str) -> Optional[int]:
         return int(match.group('PORT'))
  
 ParseType = TypeVar("ParseType", bound=NamedTuple)
+
+SUPPORTED_ENUM_VALUE_TYPES = [int, str]
 
 def all_matching_types(ty: Type) -> tuple[Type,...]:
     origin = typing.get_origin(ty)
@@ -85,8 +87,13 @@ def all_matching_types(ty: Type) -> tuple[Type,...]:
         if TypeChecks.is_list(ty) and len(all_types) > 1:
             raise TypeError(f"List cannot appear in a union. Found {ty}.")
 
-        if ty == int or ty == str or issubclass(ty, Enum):
+        if  issubclass(ty, Enum) and ty in SUPPORTED_ENUM_VALUE_TYPES:
             enum_and_int_count += 1
+        elif issubclass(ty, Enum):
+            raise TypeError(f"Enums can only have values of type {SUPPORTED_ENUM_VALUE_TYPES}")
+
+        if TypeChecks.is_any(ty):
+            raise TypeError(f"The type Any cannot be serialized/deserialized")
 
         if nt_count > 1:
             raise TypeError(f"The union {ty} has more than one NamedTuple. This is ambigous")
@@ -95,6 +102,8 @@ def all_matching_types(ty: Type) -> tuple[Type,...]:
             raise TypeError(f"The union {ty} has more than one Enum or int. This is ambigous")
 
     return all_types
+
+SERIALIZE_PRIMITIVES = [int, float, str, bool]
 
 def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
 
@@ -105,32 +114,33 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
         # w/o altering the input
         msg = dict(**raw)
 
-    def parse_internal(value: Any, field_ty_all: Type) -> Any:
-        success = False
-        for field_ty in all_matching_types(field_ty_all):
+    def parse_internal(name: str, value: Any, field_ty_all: Type) -> Any:
 
-            if TypeChecks.is_any(field_ty):
-                raise TypeError(f"The type 'Any' is not supported for parsing/serialization. Found in {field_ty_all}.")
+        for field_ty in all_matching_types(field_ty_all):
 
             # Check if type derives from NamedTuple,
             # recursively construct the object if so
-            elif TypeChecks.is_named_tuple(field_ty) and isinstance(value, dict):
+            if TypeChecks.is_named_tuple(field_ty) and isinstance(value, dict):
                 return parse(field_ty, value)
 
             # Check if type is an Enum. In the affirmative
             # case, we attempt re-constructing the enum
             # from the value
-            elif issubclass(field_ty, Enum) and isinstance(value, int):
+            elif issubclass(field_ty, Enum) and field_ty in SUPPORTED_ENUM_VALUE_TYPES:
                 return field_ty(value)
+
+            # Raw values can be embeded in values to be serialized.
+            # this indicates that the value is not to be further
+            # parsed and returned as is.
+            elif field_ty == RawValue:
+                return RawValue(value)
 
             # None of the conversion rules applies to this
             # member, just check that the types match
-            elif not isinstance(value, field_ty):
-                value_type = value.__class__
-                raise TypeError(f"The field {name} must have type {field_ty}. Found {value_type}.")
+            elif field_ty in SERIALIZE_PRIMITIVES and isinstance(value, field_ty):
+                return value
 
-        if not success:
-            raise TypeError(f"The field {name} of type {field_ty_all} cannot be parsed.")
+        raise TypeError(f"The field {name} of type {field_ty_all} cannot be parsed.")
 
     for name,field_ty_all in ty.__annotations__.items():
         # Check that the values in the json dict correspond
@@ -143,11 +153,11 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
         list_ty = TypeChecks.get_generic_list_type(field_ty_all)
 
         if list_ty is not None and isinstance(list, value):
-            msg[name] = [parse_internal(v, list_ty) for v in value]
+            msg[name] = [parse_internal(name, v, list_ty) for v in value]
         elif list_ty is not None:
             raise TypeError(f"Expecting {value} to be a list")
         else:
-            msg[name] = parse_internal(value, field_ty_all)
+            msg[name] = parse_internal(name, value, field_ty_all)
 
     msg_any = cast(Any, msg)
     ty_any = cast(Any, ty)
@@ -155,23 +165,56 @@ def parse(ty: Type[ParseType], raw: Union[str, dict]) -> ParseType:
 
 def serialize(ty: Type[ParseType], value_to_serialize: ParseType) -> dict:
 
-    result = {}
-    for name, field_ty_all in ty.__annotations__.items():
-
-        value = getattr(value_to_serialize, name)
+    def serialize_internal(name: str, value: Any, field_ty_all: Type) -> Any:
 
         for field_ty in all_matching_types(field_ty_all):
 
             # If the field is a Namedtuple, we serialize recursively
-            if is_named_tuple(field_ty) and isinstance(value, field_ty):
-                result[name] = serialize(field_ty, value)
-                break
+            if TypeChecks.is_named_tuple(field_ty) and isinstance(value, field_ty):
+                return serialize(field_ty, value)
 
+            # If we support the Enum type, we simply return the value as
+            # it must be unwrapped for serialization
+            elif issubclass(field_ty, Enum) and field_ty in SUPPORTED_ENUM_VALUE_TYPES:
+                return value.value
+
+            # Raw values get special treatment. This simply indicates that
+            # the value is not to be serialized further and just embeded
+            # as is
+            elif field_ty == RawValue:
+                return RawValue(value)
+
+            elif field_ty in SERIALIZE_PRIMITIVES and isinstance(value, field_ty):
+                return value
+
+        raise TypeError(f"The field {name} of type {field_ty_all} cannot be serialized")
+
+
+    result = {}
+    for name, field_ty_all in ty.__annotations__.items():
+
+        value = getattr(value_to_serialize, name)
+        list_ty = TypeChecks.get_generic_list_type(field_ty_all)
+
+        if list_ty is not None:
+            result[name] = [serialize_internal(name, v, list_ty) for v in value]
+        else:
+            result[name] = serialize_internal(name, value, field_ty_all)
+
+    return result
 
 class TransactionControl(Enum):
     MESSAGE = 1
     END = 2
     ERROR = 3
+
+class RawValue:
+    def __init__(self, raw: Any):
+        self.__raw = raw
+
+    @property
+    def value(self) -> Any:
+        return self.__raw
 
 class Envelope(NamedTuple):
     """
@@ -180,11 +223,11 @@ class Envelope(NamedTuple):
     times.
 
     Attributes:
-        message_id (int): An identifier that uniquely identifies this message.
-        transaction_id (int): The transaction identifier, multiple messages can
+        message_id: An identifier that uniquely identifies this message.
+        transaction_id: The transaction identifier, multiple messages can
             share the same transaction identifier and they will be handled
             within the same context.
-        transaction_control (TransactionControl): This field contains control 
+        transaction_control: This field contains control 
             codes that will be used by the message dispatcher to alter the
             state of the communication channel. Note that if the control
             is anything other than MESSAGE, it will be assumed that value
@@ -194,7 +237,7 @@ class Envelope(NamedTuple):
     message_id: int
     transaction_id: int
     transaction_control: TransactionControl
-    value: Optional[dict] = None
+    value: Optional[RawValue] = None
     error: Optional[str] = None
 
 class MessageDispatcherException(Exception):
@@ -222,7 +265,7 @@ class MessageDispatcher(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def on_message(self, payload: dict) -> None:
+    def on_message(self, payload: dict) -> Awaitable[None]:
         """
         Whenever a message belonging to the transaction
         asociated with this MessageDispatcher is received,
@@ -255,6 +298,7 @@ class MessageDispatcher(metaclass=ABCMeta):
         """
         raise NotImplemented
 
+    @abstractmethod
     def __aiter__(self) -> AsyncIterator[dict]:
         """
         This asynchronous iterator is responsible to produce
@@ -267,6 +311,8 @@ class MessageDispatcher(metaclass=ABCMeta):
         """
         raise NotImplemented
 
+TxId = int
+
 class TransactionDispatcher(metaclass=ABCMeta):
     """
     This class is responsible for creating a
@@ -276,12 +322,20 @@ class TransactionDispatcher(metaclass=ABCMeta):
     two parties.
     """
 
-    def begin_transaction(self, transaction_id: int) -> MessageDispatcher:
+    def begin_transaction(self, transaction_id: TxId) -> MessageDispatcher:
         """
         If a message with a new transaction_id is received, this method
         will be called to initiate a new bi-lateral message exchange
         between two parties. Ultimately, this is just an abstraction to
         group messages.
+        """
+        raise NotImplemented
+
+    def __aiter__(self) -> AsyncIterator[Callable[[TxId], MessageDispatcher]]:
+        """
+        This iterator is used to initiate new transactions.
+        Whenever this produces a value, a transaction handling
+        loop will be created.
         """
         raise NotImplemented
 

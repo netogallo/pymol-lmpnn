@@ -1,5 +1,6 @@
 from asyncio import CancelledError, Task, TaskGroup
 import asyncio
+from random import random
 from typing import Awaitable, Dict, NamedTuple, Optional, Set
 
 from .foundations import *
@@ -94,6 +95,9 @@ class MessageDispatcherEntry(NamedTuple):
     responses_task: Task[None]
     logger: Logger
 
+def random_id() -> int:
+    return int(random() * 10 ** 16)
+
 class Dispatcher:
 
     def __init__(
@@ -109,7 +113,8 @@ class Dispatcher:
         )
         self.__transaction_dispatcher = dispatcher
         self.__message_dispatchers: Dict[int, MessageDispatcherEntry] = {}
-        self.__message_id_counter = AsyncCounter()
+        self.__message_id_counter = AsyncCounter(random_id())
+        self.__txid_counter = AsyncCounter(random_id())
 
     def __new_message_id(self) -> Awaitable[int]:
         return self.__message_id_counter.next()
@@ -128,7 +133,7 @@ class Dispatcher:
 
         try:
             # Try serializing and writing message to transport
-            await self.__transport._write_line(json.dumps(serialize(Envelope, msg)))
+            await self.__transport._write_lines([json.dumps(serialize(Envelope, msg))])
         except Exception as e:
 
             # Something went wrong while serializing and writing
@@ -167,7 +172,7 @@ class Dispatcher:
                     message_id = await self.__new_message_id(),
                     transaction_id = transaction_id,
                     transaction_control = TransactionControl.MESSAGE,
-                    value = msg
+                    value = RawValue(msg)
                 )
                 if not (await self.__transport_write_line(dispatcher, envelope, logger = logger)):
                     # An error occured while serializing to transport. Under these circumstances
@@ -213,25 +218,35 @@ class Dispatcher:
         except Exception as e:
             logger.log_error(e)
 
+    def __start_dispatcher_loop(
+        self,
+        dispatch_tasks: TaskGroup,
+        transaction_id: int,
+        dispatcher: MessageDispatcher
+    ) -> None:
+
+        logger = self.__logger.new_scope(transaction_id = str(transaction_id))
+        self.__message_dispatchers[transaction_id] = MessageDispatcherEntry(
+            message_dispatcher = dispatcher,
+            responses_task = dispatch_tasks.create_task(
+                self.__handle_responses(transaction_id, dispatcher, logger)
+            ),
+            logger = logger
+        )
+
     def __dispatch(self, dispatch_tasks: TaskGroup, msg: Envelope):
         transaction_id = msg.transaction_id
         self.__logger.log_count(f"dispatching message[{transaction_id}]")
 
         if transaction_id not in self.__message_dispatchers:
             dispatcher = self.__transaction_dispatcher.begin_transaction(transaction_id)
-            logger = self.__logger.new_scope(transaction_id = str(transaction_id))
-            self.__message_dispatchers[msg.transaction_id] = MessageDispatcherEntry(
-                message_dispatcher = dispatcher,
-                responses_task = dispatch_tasks.create_task(
-                    self.__handle_responses(transaction_id, dispatcher, logger)
-                ),
-                logger = logger
-            )
+            self.__start_dispatcher_loop(dispatch_tasks, transaction_id, dispatcher)
+
 
         dispatcher_entry = self.__message_dispatchers[transaction_id]
         dispatcher = dispatcher_entry.message_dispatcher
         control_code = msg.transaction_control
-        value = msg.value
+        value = msg.value and msg.value.value
         error = msg.error
 
         def end_response_loop():
@@ -264,13 +279,35 @@ class Dispatcher:
                 error = str(error)
             )
 
-    async def main_loop_async(self):
+    async def main_loop_async(self) -> None:
         async with TaskGroup() as dispatch_task_group:
-            async for raw_message in self.__transport:
+            recv_task = dispatch_task_group.create_task(self.__message_receive_loop(dispatch_task_group))
+            send_task = dispatch_task_group.create_task(self.__message_send_loop(dispatch_task_group))
 
-                self.__logger.log_count("handling message")
-                self.__logger.log_debug(f"message payload", payload = raw_message)
+    async def __message_receive_loop(
+        self,
+        dispatch_task_group: TaskGroup
+    ) -> None:
+        async for raw_message in self.__transport:
 
-                envelope = parse(Envelope, raw_message)
-                self.__dispatch(dispatch_task_group, envelope)
+            self.__logger.log_count("handling message")
+            self.__logger.log_debug(f"message payload", payload = raw_message)
+
+            if len(raw_message.strip()) == 0:
+                self.__logger.log_warning("Empty line received by the transport. Protocol expects a json object per line")
+                continue
+
+            envelope = parse(Envelope, raw_message)
+            self.__dispatch(dispatch_task_group, envelope)
+
+    async def __message_send_loop(
+        self,
+        dispatch_task_group: TaskGroup
+    ) -> None:
+
+        async for init_transaction in self.__transaction_dispatcher:
+            self.__logger.log_count("yield send message")
+            txid = await self.__txid_counter.next()
+            dispatcher = init_transaction(txid)
+            self.__start_dispatcher_loop(dispatch_task_group, txid, dispatcher)
 

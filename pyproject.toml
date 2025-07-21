@@ -8,6 +8,7 @@ readme = "README.md"
 packages = [
 	{ include = "lmpnn" }
 , { include = "lmpnn_gui" }
+, { include = "lmpnn_gui_pymol" }
 ]
 
 [tool.poetry.dependencies]
@@ -74,6 +75,12 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^9.3.0"
+pytest = "^8.4.0"
 
 [virtualenvs]
 in-project = true
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "."
+]

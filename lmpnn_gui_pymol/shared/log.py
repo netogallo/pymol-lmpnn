@@ -1,5 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from enum import Enum
+import json
+import sys
 from typing import Dict, NamedTuple, Union
 
 class LogSeverity(Enum):
@@ -99,3 +101,33 @@ class Logger(metaclass=ABCMeta):
             count = str(count),
             **kwargs
         )
+
+class StdoutLogger(Logger):
+
+    def __log__(self, message: str, scope: LogAttributes, log_type: LogSeverity):
+        """
+        This method must be overriden to create a concrete logging implementation.
+        It will be called every time a message is logged with all the context
+        associated to that log. It is responsible for converting the log message
+        and context into the corresponding format and writing that value to
+        the logging channel.
+        """
+
+        attrs = json.dumps(scope.attributes)
+        if log_type == LogSeverity.Debug:
+            print(f"\033[36mDebug: {message}\033[0m\n{attrs}")
+        elif log_type == LogSeverity.Warning:
+            print(f"\033[33mWarning: {message}\033[0m\n{attrs}")
+        elif log_type == LogSeverity.Info:
+            print(f"\033[33mInfo: {message}\033[0m\n{attrs}")
+        else:
+            print(f"\033[31mError: {message}\033[0m\n{attrs}", file = sys.stderr)
+
+    def __new_scope__(self, scope: LogAttributes) -> Logger:
+        return StdoutLogger(scope = scope)
+
+__default_logger = StdoutLogger()
+
+def default_logger():
+    return __default_logger
+
