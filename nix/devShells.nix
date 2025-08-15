@@ -20,7 +20,11 @@ let
       pyqt5-sip
       pyqt5-stubs
       debugpy
+      rdkit
       virtualenv
+      scipy
+      pymol
+      pytest
     ])
   ;
 in

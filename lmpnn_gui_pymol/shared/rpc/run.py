@@ -1,9 +1,10 @@
 import asyncio
-from typing import Awaitable, Optional
+from socketserver import TCPServer
+from typing import Awaitable, NamedTuple, Optional
 
 from ..log import default_logger, Logger
 
-from .foundations import AsyncCounter, MessageDispatcher, MessageDispatcherException, TransactionDispatcher
+from .foundations import AsyncCounter, MessageDispatcher, MessageDispatcherException, TransactionDispatcher, TxId
 from .dispatcher import Dispatcher
 from .tcp import TcpClientTransport, StreamTransport
 
@@ -25,23 +26,24 @@ async def run_tcp_server(
     dispatcher: TransactionDispatcher,
     port: int = 16666,
     host = '127.0.0.1',
-    m_logger: Optional[Logger] = None
+    logger: Optional[Logger] = None
 ) -> None:
 
     connections = AsyncCounter()
-    logger: Logger = default_logger() if m_logger is None else m_logger
-    logger.log_debug("Starting TCP server")
+    legit_logger = default_logger() if logger is None else logger
+    legit_logger.log_debug("Starting TCP server")
 
     async def handler(reader, writer):
         nonlocal connections
-        nonlocal logger
+        nonlocal legit_logger
         uid = await connections.next()
-        logger.log_debug("Accepted TCP connection")
+        legit_logger.log_debug("Accepted TCP connection")
         await Dispatcher(
-            logger = logger,
-            transport = StreamTransport(f"uid={uid}", logger, reader, writer),
+            logger = legit_logger,
+            transport = StreamTransport(f"uid={uid}", legit_logger, reader, writer),
             dispatcher = dispatcher
         ).main_loop_async()
+
 
     server = await asyncio.start_server(
         handler,
@@ -49,7 +51,14 @@ async def run_tcp_server(
         port
     )
 
-    async with server:
-        await server.serve_forever()
+    async def run_server():
+        nonlocal server
+        async with server:
+            await server.serve_forever()
 
-
+    try:
+        await asyncio.to_thread(run_server)
+    except Exception as e:
+        legit_logger.log_debug("Caught exception. Terminating server.")
+        server.close()
+        raise e

@@ -226,6 +226,7 @@ class Dispatcher:
     ) -> None:
 
         logger = self.__logger.new_scope(transaction_id = str(transaction_id))
+        logger.log_debug("__start_dispatcher_loop")
         self.__message_dispatchers[transaction_id] = MessageDispatcherEntry(
             message_dispatcher = dispatcher,
             responses_task = dispatch_tasks.create_task(
@@ -281,7 +282,7 @@ class Dispatcher:
 
     async def main_loop_async(self) -> None:
         async with TaskGroup() as dispatch_task_group:
-            recv_task = dispatch_task_group.create_task(self.__message_receive_loop(dispatch_task_group))
+            #recv_task = dispatch_task_group.create_task(self.__message_receive_loop(dispatch_task_group))
             send_task = dispatch_task_group.create_task(self.__message_send_loop(dispatch_task_group))
 
     async def __message_receive_loop(
@@ -305,9 +306,13 @@ class Dispatcher:
         dispatch_task_group: TaskGroup
     ) -> None:
 
-        async for init_transaction in self.__transaction_dispatcher:
-            self.__logger.log_count("yield send message")
-            txid = await self.__txid_counter.next()
-            dispatcher = init_transaction(txid)
-            self.__start_dispatcher_loop(dispatch_task_group, txid, dispatcher)
+        try:
+            async for init_transaction in self.__transaction_dispatcher:
+                self.__logger.log_count("yield send message")
+                txid = await self.__txid_counter.next()
+                dispatcher = init_transaction(txid)
+                self.__start_dispatcher_loop(dispatch_task_group, txid, dispatcher)
+        except Exception as e:
+            self.__logger.log_error(e)
+            raise e
 
